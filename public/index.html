@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NalessS♫♫</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="scanlines"></div>
+<div class="grid-bg"></div>
+
+<div class="stars-container" id="stars"></div>
+
+<div class="app-wrapper">
+
+  <header class="top-bar">
+    <div class="top-bar-left">
+      <div class="logo-container">
+        <div class="logo-pixel">N</div>
+        <span class="logo-text">NalessS<span class="music-notes">♫♫</span></span>
+      </div>
+    </div>
+    <div class="top-bar-center">
+      <div class="users-online" id="usersOnline">
+        <span class="dot dot-green"></span>
+        <span id="userCount">1</span> en línea
+      </div>
+    </div>
+    <div class="top-bar-right">
+      <div id="authSection">
+        <a href="/login" class="btn-pixel btn-green" id="loginBtn">
+          <span>♪ Conectar Spotify</span>
+        </a>
+      </div>
+      <div class="username-area">
+        <input type="text" id="usernameInput" placeholder="Tu nombre..." maxlength="16" class="pixel-input" />
+        <button class="btn-pixel btn-blue" onclick="setUsername()">OK</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="notification-bar" id="notifBar"></div>
+
+  <main class="main-content">
+
+    <section class="player-section">
+      <div class="now-playing-card">
+        <div class="card-header-strip">NOW PLAYING</div>
+        <div class="cover-area">
+          <div class="cover-frame">
+            <img id="coverImg" src="/assets/default-cover.svg" alt="cover" />
+            <div class="cover-shine"></div>
+            <div class="vinyl-ring" id="vinylRing"></div>
+          </div>
+          <div class="cover-stars">
+            <div class="star-deco s1">★</div>
+            <div class="star-deco s2">✦</div>
+            <div class="star-deco s3">★</div>
+          </div>
+        </div>
+
+        <div class="track-info">
+          <div class="track-name-scroll">
+            <p class="track-name" id="trackName">— sin reproducir —</p>
+          </div>
+          <p class="track-artist" id="trackArtist">NalessS♫♫</p>
+          <div class="added-by-badge" id="addedByBadge" style="display:none">
+            agregado por <span id="addedByName"></span>
+          </div>
+        </div>
+
+        <div class="progress-area">
+          <span class="time-label" id="timeElapsed">0:00</span>
+          <div class="progress-bar-wrap" id="progressWrap">
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill" id="progressFill"></div>
+              <div class="progress-star" id="progressStar">★</div>
+            </div>
+          </div>
+          <span class="time-label" id="timeDuration">0:00</span>
+        </div>
+
+        <div class="controls-row">
+          <button class="ctrl-btn" onclick="prevTrack()" title="anterior">
+            <svg width="20" height="20" viewBox="0 0 20 20"><path d="M4 4h2v12H4zm10 0L7 10l7 6V4z" fill="currentColor"/></svg>
+          </button>
+          <button class="ctrl-btn ctrl-play" id="playBtn" onclick="togglePlay()">
+            <svg id="playIcon" width="24" height="24" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+            <svg id="pauseIcon" width="24" height="24" viewBox="0 0 24 24" style="display:none"><path d="M6 19h4V5H6zm8-14v14h4V5z" fill="currentColor"/></svg>
+          </button>
+          <button class="ctrl-btn" onclick="nextTrack()" title="siguiente">
+            <svg width="20" height="20" viewBox="0 0 20 20"><path d="M14 4h2v12h-2zM6 4l7 6-7 6V4z" fill="currentColor"/></svg>
+          </button>
+        </div>
+
+        <div class="volume-row">
+          <svg width="14" height="14" viewBox="0 0 24 24" style="color:var(--accent)"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill="currentColor"/></svg>
+          <input type="range" id="volumeSlider" min="0" max="100" value="80" class="volume-slider" oninput="setVolume(this.value)" />
+          <span class="vol-label" id="volLabel">80</span>
+        </div>
+      </div>
+
+      <div class="spotify-player-wrap" id="spotifyWrap" style="display:none">
+        <div id="spotifyPlayer"></div>
+        <div class="spotify-badge">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="#1DB954"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+          Spotify conectado
+        </div>
+      </div>
+    </section>
+
+    <section class="right-panel">
+
+      <div class="search-section">
+        <div class="section-header">
+          <span class="section-icon">♪</span> Buscar en Spotify
+        </div>
+        <div class="search-row">
+          <input type="text" id="searchInput" placeholder="Busca una canción..." class="pixel-input search-field" onkeydown="if(event.key==='Enter')searchSpotify()" />
+          <button class="btn-pixel btn-green" onclick="searchSpotify()">GO</button>
+        </div>
+        <div class="search-results" id="searchResults"></div>
+      </div>
+
+      <div class="upload-section">
+        <div class="section-header">
+          <span class="section-icon">↑</span> Subir MP3
+        </div>
+        <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="handleDrop(event)">
+          <div class="upload-icon">♪</div>
+          <p>Haz clic o arrastra tu MP3 aquí</p>
+          <input type="file" id="fileInput" accept="audio/*" style="display:none" onchange="uploadFile(this.files[0])" />
+        </div>
+        <div class="upload-progress" id="uploadProgress" style="display:none">
+          <div class="upload-progress-fill" id="uploadProgressFill"></div>
+          <span id="uploadProgressText">Subiendo...</span>
+        </div>
+      </div>
+
+      <div class="queue-section">
+        <div class="section-header">
+          <span class="section-icon">☰</span> Cola compartida
+          <span class="queue-count" id="queueCount">0</span>
+        </div>
+        <div class="queue-list" id="queueList">
+          <div class="queue-empty">
+            <div class="queue-empty-icon">♪</div>
+            <p>La cola está vacía</p>
+            <p class="queue-empty-sub">¡Agrega canciones!</p>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <footer class="bottom-bar">
+    <div class="footer-left">
+      <span class="pixel-text-sm">NalessS♫♫ © 2024</span>
+    </div>
+    <div class="footer-right">
+      <span class="pixel-text-sm" id="statusText">Conectando...</span>
+      <span class="dot" id="statusDot"></span>
+    </div>
+  </footer>
+
+</div>
+
+<div class="modal-overlay" id="modalOverlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">Agregar a la cola</div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-footer">
+      <button class="btn-pixel btn-green" id="modalConfirm">Agregar ♪</button>
+      <button class="btn-pixel btn-red" onclick="closeModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>
