@@ -140,6 +140,36 @@ app.post('/upload', upload.single('audio'), (req, res) => {
 
 app.get('/state', (req, res) => res.json(sharedState));
 
+app.get('/youtube/search', async (req, res) => {
+  const q = req.query.q;
+  if (!q) return res.status(400).json({ error: 'No query' });
+  if (!process.env.YOUTUBE_API_KEY) {
+    return res.status(503).json({ error: 'no_api_key' });
+  }
+  try {
+    const response = await axios.get('https://www.googleapis.com/youtube/v3/search', {
+      params: {
+        part: 'snippet',
+        q,
+        type: 'video',
+        maxResults: 8,
+        videoEmbeddable: 'true',
+        key: process.env.YOUTUBE_API_KEY
+      }
+    });
+    const items = response.data.items.map(it => ({
+      videoId: it.id.videoId,
+      title: it.snippet.title,
+      channel: it.snippet.channelTitle,
+      thumb: it.snippet.thumbnails?.default?.url || ''
+    }));
+    res.json({ items });
+  } catch (err) {
+    console.error('YouTube search error:', err.response?.data || err.message);
+    res.status(500).json({ error: 'search_failed' });
+  }
+});
+
 io.on('connection', (socket) => {
   const userId = generateId();
   console.log('Usuario conectado:', userId);

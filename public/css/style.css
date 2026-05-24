@@ -1,4 +1,4 @@
-:root {
+:root, [data-theme="nintendo"] {
   --bg: #e8ecd6;
   --bg2: #d4d9bc;
   --bg3: #c8ceaa;
@@ -18,9 +18,65 @@
   --text3: #6b7248;
   --shadow: #a8b080;
   --glow: rgba(74,124,63,0.3);
+  --grid-line: var(--bg2);
+  --particle: var(--accent3);
   --font-pixel: 'Press Start 2P', monospace;
   --font-retro: 'VT323', monospace;
 }
+
+[data-theme="dark"] {
+  --bg: #15101f;
+  --bg2: #221833;
+  --bg3: #2d2147;
+  --card: #1c1530;
+  --card2: #261c40;
+  --border: #6b4ea8;
+  --border2: #4a3478;
+  --accent: #9d6bf0;
+  --accent2: #6b3fb5;
+  --accent3: #c9a3ff;
+  --pixel-red: #e0457b;
+  --pixel-blue: #5b8fe0;
+  --pixel-yellow: #e0c04a;
+  --pixel-green: #5bc99d;
+  --text: #ede6ff;
+  --text2: #c9b8e8;
+  --text3: #9583b8;
+  --shadow: #0a0612;
+  --glow: rgba(157,107,240,0.5);
+  --grid-line: rgba(107,78,168,0.15);
+  --particle: #c9a3ff;
+  --font-pixel: 'Press Start 2P', monospace;
+  --font-retro: 'VT323', monospace;
+}
+
+[data-theme="aero"] {
+  --bg: #d4f0ff;
+  --bg2: #b3e0fa;
+  --bg3: #8fd0f5;
+  --card: #f0fbff;
+  --card2: #ddf3fe;
+  --border: #4ba8d8;
+  --border2: #2d87b8;
+  --accent: #1899d6;
+  --accent2: #0a6ba8;
+  --accent3: #5ed0a8;
+  --pixel-red: #ff6b8a;
+  --pixel-blue: #2196f3;
+  --pixel-yellow: #ffd24a;
+  --pixel-green: #3ddb95;
+  --text: #0a3a52;
+  --text2: #1a5a78;
+  --text3: #4b8aa8;
+  --shadow: rgba(74,168,216,0.4);
+  --glow: rgba(94,208,168,0.5);
+  --grid-line: rgba(75,168,216,0.12);
+  --particle: #5ed0a8;
+  --font-pixel: 'Press Start 2P', monospace;
+  --font-retro: 'VT323', monospace;
+}
+
+body { transition: background 0.5s ease, color 0.5s ease; }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -37,11 +93,12 @@ body {
   position: fixed;
   inset: 0;
   background-image:
-    linear-gradient(var(--bg2) 1px, transparent 1px),
-    linear-gradient(90deg, var(--bg2) 1px, transparent 1px);
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 28px 28px;
   pointer-events: none;
   z-index: 0;
+  transition: background-image 0.5s ease;
 }
 
 .scanlines {
@@ -329,6 +386,35 @@ body {
   height: 100%;
   object-fit: cover;
   transition: transform 0.3s;
+  position: relative;
+  z-index: 2;
+}
+
+.cover-placeholder {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    repeating-linear-gradient(45deg, var(--bg2) 0, var(--bg2) 10px, var(--bg3) 10px, var(--bg3) 20px);
+}
+
+.cover-note {
+  font-size: 64px;
+  color: var(--accent);
+  animation: coverNoteBounce 2s ease-in-out infinite;
+  text-shadow: 3px 3px 0 var(--accent3);
+}
+
+@keyframes coverNoteBounce {
+  0%, 100% { transform: translateY(0) rotate(-8deg); }
+  50% { transform: translateY(-8px) rotate(8deg); }
+}
+
+.cover-frame img[src=''], .cover-frame img:not([src]) {
+  display: none;
 }
 
 .cover-frame.playing img {
@@ -959,3 +1045,347 @@ body {
   .main-content { grid-template-columns: 1fr; }
   .top-bar { flex-direction: column; align-items: flex-start; }
 }
+
+/* ============ SELECTOR DE TEMAS ============ */
+.theme-switcher {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.theme-btn {
+  width: 38px;
+  height: 38px;
+  border: 3px solid var(--border);
+  background: var(--card2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  transition: all 0.15s;
+  position: relative;
+  top: 0;
+  box-shadow: 0 3px 0 var(--shadow);
+}
+
+.theme-btn:hover { transform: scale(1.08); }
+.theme-btn:active { top: 2px; box-shadow: none; }
+.theme-btn.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--glow), 0 3px 0 var(--shadow);
+}
+
+.theme-btn[data-set="nintendo"] { background: linear-gradient(135deg, #e8ecd6, #7ab648); }
+.theme-btn[data-set="dark"] { background: linear-gradient(135deg, #221833, #9d6bf0); }
+.theme-btn[data-set="aero"] { background: linear-gradient(135deg, #b3e0fa, #5ed0a8); }
+
+/* ============ CRIATURAS QUE BAILAN ============ */
+.creatures-stage {
+  position: relative;
+  height: 90px;
+  margin: 4px 16px 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 18px;
+  pointer-events: none;
+}
+
+.creature {
+  position: relative;
+  width: 48px;
+  height: 56px;
+  transform-origin: bottom center;
+}
+
+.creature.dancing {
+  animation: creatureDance 0.5s ease-in-out infinite;
+}
+.creature.dancing.c-delay1 { animation-delay: 0.12s; }
+.creature.dancing.c-delay2 { animation-delay: 0.24s; }
+
+@keyframes creatureDance {
+  0%, 100% { transform: translateY(0) rotate(-4deg) scaleY(1); }
+  50% { transform: translateY(-10px) rotate(4deg) scaleY(1.06); }
+}
+
+.creature-body {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 38px;
+  height: 38px;
+  background: var(--accent);
+  border: 3px solid var(--accent2);
+  border-radius: 50% 50% 45% 45%;
+}
+
+.creature-eye {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  background: #fff;
+  border-radius: 50%;
+  top: 12px;
+}
+.creature-eye::after {
+  content: '';
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background: #111;
+  border-radius: 50%;
+  top: 2px;
+  left: 2px;
+  animation: eyeBlink 3s infinite;
+}
+.creature-eye.left { left: 9px; }
+.creature-eye.right { right: 9px; }
+
+@keyframes eyeBlink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  96% { transform: scaleY(0.1); }
+}
+
+.creature-ear {
+  position: absolute;
+  width: 10px;
+  height: 16px;
+  background: var(--accent);
+  border: 2px solid var(--accent2);
+  border-radius: 50% 50% 0 0;
+  top: -8px;
+}
+.creature-ear.left { left: 6px; transform: rotate(-15deg); }
+.creature-ear.right { right: 6px; transform: rotate(15deg); }
+
+.creature-note {
+  position: absolute;
+  font-size: 14px;
+  color: var(--accent3);
+  top: -6px;
+  right: -8px;
+  opacity: 0;
+}
+.creature.dancing .creature-note {
+  animation: noteFloat 1.2s ease-out infinite;
+}
+
+@keyframes noteFloat {
+  0% { opacity: 0; transform: translateY(0) rotate(0); }
+  30% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-24px) rotate(20deg); }
+}
+
+.creature.c2 .creature-body { background: var(--pixel-blue); border-color: var(--accent2); }
+.creature.c2 .creature-ear { background: var(--pixel-blue); }
+.creature.c3 .creature-body { background: var(--pixel-red); border-color: var(--accent2); border-radius: 45%; }
+.creature.c3 .creature-ear { display: none; }
+
+/* equalizer bars under creatures */
+.eq-bars {
+  display: flex;
+  gap: 3px;
+  align-items: flex-end;
+  height: 22px;
+  margin: 0 auto;
+}
+.eq-bar {
+  width: 4px;
+  background: var(--accent3);
+  height: 4px;
+}
+.playing-active .eq-bar { animation: eqBounce 0.6s ease-in-out infinite; }
+.eq-bar:nth-child(1){animation-delay:0s}
+.eq-bar:nth-child(2){animation-delay:.1s}
+.eq-bar:nth-child(3){animation-delay:.2s}
+.eq-bar:nth-child(4){animation-delay:.3s}
+.eq-bar:nth-child(5){animation-delay:.15s}
+.eq-bar:nth-child(6){animation-delay:.25s}
+.eq-bar:nth-child(7){animation-delay:.05s}
+
+@keyframes eqBounce {
+  0%, 100% { height: 4px; }
+  50% { height: 22px; }
+}
+
+/* ============ PARTICULAS / BURBUJAS DE FONDO ============ */
+.particles-bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.particle {
+  position: absolute;
+  bottom: -40px;
+  border-radius: 50%;
+  opacity: 0;
+}
+
+[data-theme="aero"] .particle {
+  background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.9), rgba(94,208,168,0.3));
+  border: 1px solid rgba(255,255,255,0.5);
+  box-shadow: inset 0 0 8px rgba(255,255,255,0.6);
+  animation: bubbleRise linear infinite;
+}
+
+[data-theme="dark"] .particle {
+  background: var(--particle);
+  box-shadow: 0 0 8px var(--particle), 0 0 16px var(--particle);
+  animation: emberFloat linear infinite;
+}
+
+[data-theme="nintendo"] .particle {
+  background: none;
+  color: var(--particle);
+  box-shadow: none;
+  animation: emberFloat linear infinite;
+}
+
+@keyframes bubbleRise {
+  0% { opacity: 0; transform: translateY(0) translateX(0); }
+  10% { opacity: 0.8; }
+  90% { opacity: 0.6; }
+  100% { opacity: 0; transform: translateY(-110vh) translateX(30px); }
+}
+
+@keyframes emberFloat {
+  0% { opacity: 0; transform: translateY(0) scale(1); }
+  15% { opacity: 0.9; }
+  85% { opacity: 0.5; }
+  100% { opacity: 0; transform: translateY(-105vh) scale(0.4); }
+}
+
+/* ============ EFECTOS POR TEMA ============ */
+[data-theme="aero"] .now-playing-card,
+[data-theme="aero"] .search-section,
+[data-theme="aero"] .upload-section,
+[data-theme="aero"] .queue-section {
+  background: linear-gradient(160deg, rgba(255,255,255,0.7), var(--card));
+  backdrop-filter: blur(4px);
+  box-shadow: 0 6px 20px var(--shadow), inset 0 1px 0 rgba(255,255,255,0.8);
+  border-radius: 14px;
+}
+
+[data-theme="aero"] .card-header-strip,
+[data-theme="aero"] .section-header {
+  background: linear-gradient(180deg, var(--accent3), var(--accent));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+}
+
+[data-theme="aero"] .btn-pixel,
+[data-theme="aero"] .ctrl-btn,
+[data-theme="aero"] .ctrl-play {
+  border-radius: 10px;
+}
+
+[data-theme="aero"] .cover-frame {
+  border-radius: 14px;
+  box-shadow: 0 8px 24px var(--shadow), inset 0 2px 4px rgba(255,255,255,0.6);
+}
+
+[data-theme="dark"] .now-playing-card,
+[data-theme="dark"] .search-section,
+[data-theme="dark"] .upload-section,
+[data-theme="dark"] .queue-section {
+  box-shadow: 4px 4px 0 var(--shadow), 0 0 18px rgba(157,107,240,0.25);
+}
+
+[data-theme="dark"] .logo-pixel,
+[data-theme="dark"] .card-header-strip {
+  text-shadow: 0 0 8px var(--accent3);
+}
+
+[data-theme="dark"] .cover-note {
+  text-shadow: 0 0 12px var(--accent), 0 0 24px var(--accent);
+}
+
+[data-theme="dark"] .scanlines {
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(157,107,240,0.04) 2px, rgba(157,107,240,0.04) 4px);
+}
+
+/* moon/sun decorative orb for dark theme */
+.mystic-orb {
+  position: fixed;
+  top: 40px;
+  right: 60px;
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.6s;
+}
+[data-theme="dark"] .mystic-orb {
+  opacity: 1;
+  background: radial-gradient(circle at 35% 35%, #ede6ff, #9d6bf0);
+  box-shadow: 0 0 40px rgba(157,107,240,0.6), 0 0 80px rgba(157,107,240,0.3);
+  animation: orbGlow 4s ease-in-out infinite;
+}
+[data-theme="aero"] .mystic-orb {
+  opacity: 1;
+  background: radial-gradient(circle at 35% 35%, #fff, #ffd24a);
+  box-shadow: 0 0 50px rgba(255,210,74,0.7);
+  animation: orbGlow 5s ease-in-out infinite;
+}
+
+@keyframes orbGlow {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+.theme-label {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: var(--text3);
+  margin-right: 4px;
+}
+
+/* ============ YOUTUBE ============ */
+.yt-header {
+  background: #cc1f1f;
+  color: #fff;
+}
+[data-theme="dark"] .yt-header { background: #8a1a3a; }
+[data-theme="aero"] .yt-header { background: linear-gradient(180deg, #ff6b6b, #cc1f1f); }
+
+.yt-hint {
+  font-family: var(--font-retro);
+  font-size: 15px;
+  color: var(--text3);
+  padding: 0 12px 8px;
+}
+
+.yt-player-wrap {
+  padding: 10px 16px 0;
+}
+
+#ytPlayer {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 3px solid var(--border);
+  background: #000;
+  display: none;
+}
+#ytPlayer.active { display: block; }
+#ytPlayer iframe { width: 100%; height: 100%; }
+
+.yt-result-thumb {
+  width: 48px;
+  height: 36px;
+  object-fit: cover;
+  border: 2px solid var(--border);
+  flex-shrink: 0;
+}
+
+.search-item-add.yt-add {
+  background: #cc1f1f;
+  border-color: #8a1212;
+}
+.search-item-add.yt-add:hover { background: #e23b3b; }

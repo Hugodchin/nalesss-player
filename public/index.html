@@ -12,6 +12,8 @@
 
 <div class="scanlines"></div>
 <div class="grid-bg"></div>
+<div class="mystic-orb"></div>
+<div class="particles-bg" id="particles"></div>
 
 <div class="stars-container" id="stars"></div>
 
@@ -40,6 +42,12 @@
         <input type="text" id="usernameInput" placeholder="Tu nombre..." maxlength="16" class="pixel-input" />
         <button class="btn-pixel btn-blue" onclick="setUsername()">OK</button>
       </div>
+      <div class="theme-switcher">
+        <span class="theme-label">TEMA</span>
+        <button class="theme-btn active" data-set="nintendo" onclick="setTheme('nintendo')" title="Old Nintendo">🌿</button>
+        <button class="theme-btn" data-set="dark" onclick="setTheme('dark')" title="Dark Fantasy">🌙</button>
+        <button class="theme-btn" data-set="aero" onclick="setTheme('aero')" title="Frutiger Aero">💧</button>
+      </div>
     </div>
   </header>
 
@@ -52,7 +60,10 @@
         <div class="card-header-strip">NOW PLAYING</div>
         <div class="cover-area">
           <div class="cover-frame">
-            <img id="coverImg" src="/assets/default-cover.svg" alt="cover" />
+            <img id="coverImg" src="" alt="" style="display:none" />
+            <div class="cover-placeholder" id="coverPlaceholder">
+              <span class="cover-note">♪</span>
+            </div>
             <div class="cover-shine"></div>
             <div class="vinyl-ring" id="vinylRing"></div>
           </div>
@@ -102,6 +113,40 @@
           <input type="range" id="volumeSlider" min="0" max="100" value="80" class="volume-slider" oninput="setVolume(this.value)" />
           <span class="vol-label" id="volLabel">80</span>
         </div>
+
+        <div class="creatures-stage" id="creaturesStage">
+          <div class="creature c1" id="creature1">
+            <span class="creature-note">♪</span>
+            <div class="creature-ear left"></div>
+            <div class="creature-ear right"></div>
+            <div class="creature-body">
+              <div class="creature-eye left"></div>
+              <div class="creature-eye right"></div>
+            </div>
+          </div>
+          <div class="creature c2 c-delay1" id="creature2">
+            <span class="creature-note">♫</span>
+            <div class="creature-ear left"></div>
+            <div class="creature-ear right"></div>
+            <div class="creature-body">
+              <div class="creature-eye left"></div>
+              <div class="creature-eye right"></div>
+            </div>
+          </div>
+          <div class="creature c3 c-delay2" id="creature3">
+            <span class="creature-note">♪</span>
+            <div class="creature-body">
+              <div class="creature-eye left"></div>
+              <div class="creature-eye right"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="eq-bars" id="eqBars">
+          <div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div>
+          <div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div>
+          <div class="eq-bar"></div>
+        </div>
       </div>
 
       <div class="spotify-player-wrap" id="spotifyWrap" style="display:none">
@@ -110,6 +155,10 @@
           <svg width="12" height="12" viewBox="0 0 24 24" fill="#1DB954"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
           Spotify conectado
         </div>
+      </div>
+
+      <div class="yt-player-wrap" id="ytWrap">
+        <div id="ytPlayer"></div>
       </div>
     </section>
 
@@ -124,6 +173,18 @@
           <button class="btn-pixel btn-green" onclick="searchSpotify()">GO</button>
         </div>
         <div class="search-results" id="searchResults"></div>
+      </div>
+
+      <div class="search-section yt-section">
+        <div class="section-header yt-header">
+          <span class="section-icon">▶</span> YouTube (para todos)
+        </div>
+        <div class="search-row">
+          <input type="text" id="ytSearchInput" placeholder="Busca o pega un link de YouTube..." class="pixel-input search-field" onkeydown="if(event.key==='Enter')handleYouTube()" />
+          <button class="btn-pixel btn-red" onclick="handleYouTube()">GO</button>
+        </div>
+        <div class="yt-hint">Pega un link de video o playlist, o busca por nombre</div>
+        <div class="search-results" id="ytResults"></div>
       </div>
 
       <div class="upload-section">
@@ -182,6 +243,7 @@
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
+<script src="https://www.youtube.com/iframe_api"></script>
 <script src="/js/app.js"></script>
 </body>
 </html>

@@ -11,6 +11,9 @@ let isPlaying = false;
 let audioElement = null;
 let progressInterval = null;
 let currentTrackDuration = 0;
+let ytPlayer = null;
+let ytReady = false;
+let ytProgressTimer = null;
 
 const getCookie = (name) => {
   const val = document.cookie.split('; ').find(r => r.startsWith(name + '='));
@@ -101,6 +104,135 @@ async function spotifyApi(endpoint, method = 'GET', body = null) {
   return res.json().catch(() => ({}));
 }
 
+function onYouTubeIframeAPIReady() {
+  ytPlayer = new YT.Player('ytPlayer', {
+    height: '180',
+    width: '320',
+    playerVars: { autoplay: 0, controls: 1, rel: 0 },
+    events: {
+      onReady: () => { ytReady = true; },
+      onStateChange: onYtStateChange
+    }
+  });
+}
+
+function onYtStateChange(e) {
+  if (e.data === YT.PlayerState.ENDED) {
+    socket.emit('next_track');
+  }
+  if (e.data === YT.PlayerState.PLAYING) {
+    startYtProgress();
+  } else {
+    clearInterval(ytProgressTimer);
+  }
+}
+
+function startYtProgress() {
+  clearInterval(ytProgressTimer);
+  ytProgressTimer = setInterval(() => {
+    if (!ytPlayer || !ytPlayer.getDuration) return;
+    const dur = ytPlayer.getDuration() * 1000;
+    const pos = ytPlayer.getCurrentTime() * 1000;
+    const pct = dur ? (pos / dur) * 100 : 0;
+    updateProgress(pct, pos, dur);
+    socket.emit('update_progress', pct);
+  }, 1000);
+}
+
+function parseYouTube(input) {
+  const text = input.trim();
+  let videoId = null;
+  let playlistId = null;
+
+  const listMatch = text.match(/[?&]list=([a-zA-Z0-9_-]+)/);
+  if (listMatch) playlistId = listMatch[1];
+
+  const vMatch = text.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+  const shortMatch = text.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
+  const embedMatch = text.match(/embed\/([a-zA-Z0-9_-]{11})/);
+  if (vMatch) videoId = vMatch[1];
+  else if (shortMatch) videoId = shortMatch[1];
+  else if (embedMatch) videoId = embedMatch[1];
+  else if (/^[a-zA-Z0-9_-]{11}$/.test(text)) videoId = text;
+
+  return { videoId, playlistId, isUrl: text.includes('youtu') };
+}
+
+async function handleYouTube() {
+  const input = document.getElementById('ytSearchInput');
+  const val = input.value.trim();
+  if (!val) return;
+
+  const parsed = parseYouTube(val);
+
+  if (parsed.playlistId) {
+    addToQueue({
+      type: 'youtube',
+      ytType: 'playlist',
+      playlistId: parsed.playlistId,
+      videoId: parsed.videoId || null,
+      name: 'Playlist de YouTube',
+      artist: 'YouTube',
+      cover: null
+    });
+    input.value = '';
+    return;
+  }
+
+  if (parsed.videoId) {
+    addToQueue({
+      type: 'youtube',
+      ytType: 'video',
+      videoId: parsed.videoId,
+      name: 'Video de YouTube',
+      artist: 'YouTube',
+      cover: `https://i.ytimg.com/vi/${parsed.videoId}/default.jpg`
+    });
+    input.value = '';
+    return;
+  }
+
+  ytSearch(val);
+}
+
+async function ytSearch(query) {
+  const resultsEl = document.getElementById('ytResults');
+  resultsEl.innerHTML = '<div style="font-family:var(--font-pixel);font-size:8px;color:var(--text3);padding:12px">Buscando...</div>';
+
+  try {
+    const res = await fetch('/youtube/search?q=' + encodeURIComponent(query));
+    if (res.status === 503) {
+      resultsEl.innerHTML = '<div style="font-family:var(--font-retro);font-size:15px;color:var(--text3);padding:12px">La búsqueda necesita una API key de YouTube. Por ahora pega un link directo del video.</div>';
+      return;
+    }
+    const data = await res.json();
+    if (!data.items || !data.items.length) {
+      resultsEl.innerHTML = '<div style="font-family:var(--font-pixel);font-size:8px;color:var(--pixel-red);padding:12px">Sin resultados</div>';
+      return;
+    }
+    resultsEl.innerHTML = '';
+    data.items.forEach(item => {
+      const div = document.createElement('div');
+      div.className = 'search-item';
+      div.innerHTML = `
+        <img class="yt-result-thumb" src="${item.thumb}" alt="" />
+        <div class="search-item-info">
+          <div class="search-item-name">${escHtml(item.title)}</div>
+          <div class="search-item-artist">${escHtml(item.channel)}</div>
+        </div>
+        <button class="search-item-add yt-add" onclick='addToQueue(${JSON.stringify({
+          type: 'youtube', ytType: 'video', videoId: item.videoId,
+          name: item.title, artist: item.channel,
+          cover: item.thumb
+        }).replace(/'/g, "&#39;")})'>+ Cola</button>
+      `;
+      resultsEl.appendChild(div);
+    });
+  } catch (e) {
+    resultsEl.innerHTML = '<div style="font-family:var(--font-pixel);font-size:8px;color:var(--pixel-red);padding:12px">Error al buscar</div>';
+  }
+}
+
 async function searchSpotify() {
   const query = document.getElementById('searchInput').value.trim();
   if (!query) return;
@@ -182,6 +314,8 @@ function togglePlay() {
   socket.emit('toggle_play', newState);
   if (currentTrack?.type === 'spotify' && spotifyPlayer) {
     newState ? spotifyPlayer.resume() : spotifyPlayer.pause();
+  } else if (currentTrack?.type === 'youtube' && ytPlayer && ytReady) {
+    newState ? ytPlayer.playVideo() : ytPlayer.pauseVideo();
   } else if (currentTrack?.type === 'local' && audioElement) {
     newState ? audioElement.play() : audioElement.pause();
   }
@@ -194,12 +328,14 @@ function nextTrack() {
 function prevTrack() {
   if (audioElement) { audioElement.currentTime = 0; }
   if (spotifyPlayer) { spotifyPlayer.seek(0); }
+  if (ytPlayer && ytReady && currentTrack?.type === 'youtube') { ytPlayer.seekTo(0); }
 }
 
 function setVolume(val) {
   document.getElementById('volLabel').textContent = val;
   if (audioElement) audioElement.volume = val / 100;
   if (spotifyPlayer) spotifyPlayer.setVolume(val / 100);
+  if (ytPlayer && ytReady) ytPlayer.setVolume(parseInt(val));
 }
 
 function playTrack(track) {
@@ -212,12 +348,29 @@ function playTrack(track) {
   }
 
   clearInterval(progressInterval);
+  clearInterval(ytProgressTimer);
+
+  const ytEl = document.getElementById('ytPlayer');
 
   if (track.type === 'spotify') {
+    if (ytEl) ytEl.classList.remove('active');
+    if (ytReady && ytPlayer) ytPlayer.stopVideo();
     if (isSpotifyReady && spotifyDeviceId) {
       spotifyApi('/me/player/play', 'PUT', { uris: [track.uri] });
     }
+  } else if (track.type === 'youtube') {
+    if (ytEl) ytEl.classList.add('active');
+    if (ytReady && ytPlayer) {
+      if (track.ytType === 'playlist') {
+        ytPlayer.loadPlaylist({ list: track.playlistId, listType: 'playlist' });
+      } else {
+        ytPlayer.loadVideoById(track.videoId);
+      }
+      ytPlayer.setVolume(document.getElementById('volumeSlider').value);
+    }
   } else if (track.type === 'local') {
+    if (ytEl) ytEl.classList.remove('active');
+    if (ytReady && ytPlayer) ytPlayer.stopVideo();
     audioElement = new Audio(track.url);
     audioElement.volume = document.getElementById('volumeSlider').value / 100;
     audioElement.play().catch(e => console.log('Audio play error:', e));
@@ -248,11 +401,18 @@ function updateNowPlayingUI(track) {
   }
 
   const coverImg = document.getElementById('coverImg');
+  const coverPlaceholder = document.getElementById('coverPlaceholder');
   if (track.cover) {
     coverImg.src = track.cover;
-    coverImg.onerror = () => { coverImg.src = '/assets/default-cover.svg'; };
+    coverImg.style.display = 'block';
+    coverPlaceholder.style.display = 'none';
+    coverImg.onerror = () => {
+      coverImg.style.display = 'none';
+      coverPlaceholder.style.display = 'flex';
+    };
   } else {
-    coverImg.src = '/assets/default-cover.svg';
+    coverImg.style.display = 'none';
+    coverPlaceholder.style.display = 'flex';
   }
 
   const coverFrame = document.querySelector('.cover-frame');
@@ -285,6 +445,17 @@ function updatePlayBtn(playing) {
     playIcon.style.display = 'block';
     pauseIcon.style.display = 'none';
   }
+  setCreaturesDancing(playing);
+}
+
+function setCreaturesDancing(active) {
+  ['creature1', 'creature2', 'creature3'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('dancing', active);
+  });
+  const eq = document.getElementById('eqBars');
+  if (eq) eq.classList.toggle('playing-active', active);
 }
 
 function renderQueue(queue) {
@@ -407,6 +578,40 @@ function initStars() {
   }
 }
 
+function initParticles() {
+  const container = document.getElementById('particles');
+  if (!container) return;
+  container.innerHTML = '';
+  const count = 24;
+  for (let i = 0; i < count; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    const size = 6 + Math.random() * 26;
+    p.style.width = size + 'px';
+    p.style.height = size + 'px';
+    p.style.left = Math.random() * 100 + '%';
+    p.style.animationDuration = (8 + Math.random() * 12) + 's';
+    p.style.animationDelay = (Math.random() * 10) + 's';
+    container.appendChild(p);
+  }
+}
+
+function setTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('nalesss_theme', theme);
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-set') === theme);
+  });
+  initParticles();
+  const names = { nintendo: 'Old Nintendo', dark: 'Dark Fantasy', aero: 'Frutiger Aero' };
+  showNotif('Tema: ' + (names[theme] || theme));
+}
+
+function loadSavedTheme() {
+  const saved = localStorage.getItem('nalesss_theme') || 'nintendo';
+  setTheme(saved);
+}
+
 document.getElementById('progressWrap').addEventListener('click', (e) => {
   const rect = e.currentTarget.getBoundingClientRect();
   const pct = (e.clientX - rect.left) / rect.width;
@@ -438,6 +643,9 @@ socket.on('playback_state', ({ isPlaying: playing }) => {
   updatePlayBtn(playing);
   if (!playing && audioElement) audioElement.pause();
   if (playing && audioElement) audioElement.play().catch(() => {});
+  if (currentTrack?.type === 'youtube' && ytPlayer && ytReady) {
+    playing ? ytPlayer.playVideo() : ytPlayer.pauseVideo();
+  }
 });
 
 socket.on('progress_update', (pct) => {
@@ -466,4 +674,6 @@ if (myUsername) {
 }
 
 initStars();
+initParticles();
+loadSavedTheme();
 initSpotify();
