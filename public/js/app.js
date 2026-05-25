@@ -475,6 +475,7 @@ function setCreaturesDancing(active) {
   });
   const eq = document.getElementById('eqBars');
   if (eq) eq.classList.toggle('playing-active', active);
+  document.body.classList.toggle('music-playing', active);
 }
 
 function renderQueue(queue) {
@@ -633,6 +634,86 @@ function renderChatHistory(history) {
   const box = document.getElementById('chatMessages');
   box.innerHTML = '';
   history.forEach(appendChatMessage);
+}
+
+// ===== PERSONAJES ANIMADOS (sprites por frames) =====
+const CHARACTERS = {
+  dark: [
+    { name: 'mago', frames: 4, height: 200, fps: 4, pos: { left: '3%', bottom: '2%' } },
+    { name: 'caballero', frames: 4, height: 160, fps: 5, pos: { right: '3%', bottom: '2%' } },
+    { name: 'familiar', frames: 4, height: 90, fps: 6, pos: { left: '14%', bottom: '20%' }, float: true },
+    { name: 'dragon', frames: 4, height: 110, fps: 4, pos: { right: '12%', top: '8%' }, fly: true }
+  ],
+  aero: [],
+  nintendo: []
+};
+
+let charTimers = [];
+
+function spriteExists(url) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = url;
+  });
+}
+
+async function renderCharacters(theme) {
+  const stage = document.getElementById('characterStage');
+  if (!stage) return;
+  charTimers.forEach(t => clearInterval(t));
+  charTimers = [];
+  stage.innerHTML = '';
+
+  const chars = CHARACTERS[theme] || [];
+  if (!chars.length) return;
+
+  // probar si los sprites existen (carpeta Sprites con mayuscula)
+  const base = '/assets/Sprites/';
+  for (const ch of chars) {
+    const firstUrl = base + ch.name + '1.png';
+    const ok = await spriteExists(firstUrl);
+    if (!ok) continue;
+
+    const el = document.createElement('div');
+    el.className = 'game-char' + (ch.float ? ' floating' : '') + (ch.fly ? ' flying' : '');
+    el.style.height = ch.height + 'px';
+    Object.assign(el.style, ch.pos);
+
+    const imgEl = document.createElement('img');
+    imgEl.src = firstUrl;
+    imgEl.style.height = '100%';
+    el.appendChild(imgEl);
+    stage.appendChild(el);
+
+    // animacion cuadro por cuadro
+    let frame = 1;
+    const baseFps = ch.fps;
+    const timer = setInterval(() => {
+      frame = (frame % ch.frames) + 1;
+      imgEl.src = base + ch.name + frame + '.png';
+    }, 1000 / baseFps);
+    charTimers.push(timer);
+  }
+}
+
+// ===== FONDO DE IMAGEN POR TEMA =====
+async function renderBgImage(theme) {
+  const el = document.getElementById('themeBgImage');
+  if (!el) return;
+  const map = { dark: 'fondo-dark.png', aero: 'fondo-aero.png', nintendo: 'fondo-nintendo.png' };
+  const file = map[theme];
+  if (!file) { el.style.backgroundImage = ''; el.classList.remove('active'); return; }
+  const url = '/assets/backgrounds/' + file;
+  const ok = await spriteExists(url);
+  if (ok) {
+    el.style.backgroundImage = `url('${url}')`;
+    el.classList.add('active');
+  } else {
+    el.style.backgroundImage = '';
+    el.classList.remove('active');
+  }
 }
 
 // ===== ESCENA DE FONDO POR TEMA =====
@@ -839,8 +920,17 @@ function setTheme(theme) {
     btn.classList.toggle('active', btn.getAttribute('data-set') === theme);
   });
   initParticles();
+  renderBgImage(theme);
   renderScene(theme);
-  renderStickers(theme);
+  renderCharacters(theme);
+  // si hay personajes animados reales para este tema, ocultar los stickers SVG simples
+  const hasChars = (CHARACTERS[theme] || []).length > 0;
+  if (hasChars) {
+    const layer = document.getElementById('stickersLayer');
+    if (layer) layer.innerHTML = '';
+  } else {
+    renderStickers(theme);
+  }
   const names = { nintendo: 'Old Nintendo', dark: 'Dark Fantasy', aero: 'Frutiger Aero' };
   showNotif('Tema: ' + (names[theme] || theme));
 }

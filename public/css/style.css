@@ -1638,3 +1638,80 @@ body {
   border-radius: 14px 14px 0 0;
   pointer-events: none;
 }
+
+/* ===== FONDO DE IMAGEN POR TEMA ===== */
+.theme-bg-image {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0;
+  transition: opacity 1s ease;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+.theme-bg-image.active { opacity: 1; }
+/* cuando hay imagen de fondo, atenuar el grid y la escena SVG */
+.theme-bg-image.active ~ .theme-scene { opacity: 0 !important; }
+.theme-bg-image.active ~ .grid-bg { opacity: 0.15; }
+
+/* overlay oscuro sutil para legibilidad sobre el fondo */
+.theme-bg-image.active::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 8, 18, 0.35);
+}
+[data-theme="aero"] .theme-bg-image.active::after {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* ===== PERSONAJES ANIMADOS ===== */
+.character-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  overflow: hidden;
+}
+.game-char {
+  position: absolute;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 6px 10px rgba(0,0,0,0.5));
+}
+.game-char img {
+  display: block;
+  image-rendering: pixelated;
+}
+.game-char.floating {
+  animation: charFloat 3s ease-in-out infinite;
+}
+@keyframes charFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-16px); }
+}
+.game-char.flying {
+  animation: charFly 18s linear infinite;
+}
+@keyframes charFly {
+  0% { transform: translateX(0) translateY(0); }
+  25% { transform: translateX(-30vw) translateY(-20px); }
+  50% { transform: translateX(-60vw) translateY(10px); }
+  75% { transform: translateX(-30vw) translateY(-15px); }
+  100% { transform: translateX(0) translateY(0); }
+}
+/* cuando suena musica, los personajes "bailan" mas rapido */
+.music-playing .game-char:not(.flying) {
+  animation: charDance 0.5s ease-in-out infinite;
+}
+@keyframes charDance {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50% { transform: translateY(-10px) rotate(2deg); }
+}
+
+@media (max-width: 900px) {
+  .game-char { transform: scale(0.6); }
+  .game-char.flying { display: none; }
+}
