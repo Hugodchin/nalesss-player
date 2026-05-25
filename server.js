@@ -36,7 +36,10 @@ let sharedState = {
   currentTrack: null,
   isPlaying: false,
   progress: 0,
-  users: {}
+  startedAt: null,
+  pausedProgressMs: 0,
+  users: {},
+  chat: []
 };
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -174,7 +177,28 @@ io.on('connection', (socket) => {
   const userId = generateId();
   console.log('Usuario conectado:', userId);
 
-  socket.emit('state_sync', sharedState);
+  // calcular progreso real en ms para sincronizar a quien entra
+  function currentPositionMs() {
+    if (!sharedState.currentTrack) return 0;
+    if (sharedState.isPlaying && sharedState.startedAt) {
+      return sharedState.pausedProgressMs + (Date.now() - sharedState.startedAt);
+    }
+    return sharedState.pausedProgressMs;
+  }
+
+  function startPlaying(track) {
+    sharedState.currentTrack = track;
+    sharedState.isPlaying = true;
+    sharedState.pausedProgressMs = 0;
+    sharedState.startedAt = Date.now();
+    io.emit('queue_updated', sharedState.queue);
+    io.emit('track_changed', { track, positionMs: 0 });
+  }
+
+  socket.emit('state_sync', {
+    ...sharedState,
+    positionMs: currentPositionMs()
+  });
   socket.emit('user_id', userId);
 
   socket.on('set_username', (username) => {
@@ -187,6 +211,18 @@ io.on('connection', (socket) => {
     sharedState.queue.push(newTrack);
     io.emit('queue_updated', sharedState.queue);
     io.emit('notification', { message: `${newTrack.addedBy} agregó "${newTrack.name}"`, type: 'add' });
+
+    if (!sharedState.currentTrack) {
+      const next = sharedState.queue.shift();
+      startPlaying(next);
+    }
+  });
+
+  socket.on('play_from_queue', (trackId) => {
+    const idx = sharedState.queue.findIndex(t => t.id === trackId);
+    if (idx === -1) return;
+    const track = sharedState.queue.splice(idx, 1)[0];
+    startPlaying(track);
   });
 
   socket.on('remove_from_queue', (trackId) => {
@@ -194,34 +230,59 @@ io.on('connection', (socket) => {
     io.emit('queue_updated', sharedState.queue);
   });
 
-  socket.on('play_track', (track) => {
-    sharedState.currentTrack = track;
-    sharedState.isPlaying = true;
-    sharedState.progress = 0;
-    io.emit('track_changed', track);
-    io.emit('playback_state', { isPlaying: true, progress: 0 });
+  socket.on('stop_track', () => {
+    sharedState.currentTrack = null;
+    sharedState.isPlaying = false;
+    sharedState.pausedProgressMs = 0;
+    sharedState.startedAt = null;
+    io.emit('track_stopped');
   });
 
   socket.on('toggle_play', (isPlaying) => {
-    sharedState.isPlaying = isPlaying;
-    io.emit('playback_state', { isPlaying, progress: sharedState.progress });
+    if (isPlaying && !sharedState.isPlaying) {
+      sharedState.startedAt = Date.now();
+      sharedState.isPlaying = true;
+    } else if (!isPlaying && sharedState.isPlaying) {
+      sharedState.pausedProgressMs = currentPositionMs();
+      sharedState.isPlaying = false;
+      sharedState.startedAt = null;
+    }
+    io.emit('playback_state', { isPlaying: sharedState.isPlaying, positionMs: currentPositionMs() });
   });
 
-  socket.on('update_progress', (progress) => {
-    sharedState.progress = progress;
-    socket.broadcast.emit('progress_update', progress);
+  // seek: alguien adelanta/retrasa la barra
+  socket.on('seek', (positionMs) => {
+    sharedState.pausedProgressMs = positionMs;
+    sharedState.startedAt = sharedState.isPlaying ? Date.now() : null;
+    io.emit('seek_to', { positionMs, isPlaying: sharedState.isPlaying });
   });
 
   socket.on('next_track', () => {
     if (sharedState.queue.length > 0) {
       const next = sharedState.queue.shift();
-      sharedState.currentTrack = next;
-      sharedState.isPlaying = true;
-      sharedState.progress = 0;
-      io.emit('queue_updated', sharedState.queue);
-      io.emit('track_changed', next);
-      io.emit('playback_state', { isPlaying: true, progress: 0 });
+      startPlaying(next);
+    } else {
+      sharedState.currentTrack = null;
+      sharedState.isPlaying = false;
+      sharedState.pausedProgressMs = 0;
+      sharedState.startedAt = null;
+      io.emit('track_stopped');
     }
+  });
+
+  // CHAT - solo usuarios con nombre
+  socket.on('chat_message', (text) => {
+    const user = sharedState.users[userId];
+    if (!user || !user.username) return; // sin nombre, no entra al chat
+    const msg = {
+      id: generateId(),
+      user: user.username,
+      text: String(text).slice(0, 300),
+      time: Date.now()
+    };
+    sharedState.chat.push(msg);
+    if (sharedState.chat.length > 100) sharedState.chat.shift();
+    io.emit('chat_message', msg);
   });
 
   socket.on('disconnect', () => {
