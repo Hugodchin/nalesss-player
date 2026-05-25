@@ -16,6 +16,7 @@ let ytReady = false;
 let ytProgressTimer = null;
 let videoVisible = false;
 let seekingLocal = false;
+let spotifyWasPlaying = false;
 
 const getCookie = (name) => {
   const val = document.cookie.split('; ').find(r => r.startsWith(name + '='));
@@ -54,6 +55,15 @@ async function initSpotify() {
       const track = state.track_window.current_track;
       currentTrackDuration = state.duration;
       updateProgress(state.position / state.duration * 100, state.position, state.duration);
+
+      // Detectar fin de cancion en Spotify para avanzar la cola automaticamente
+      if (state.paused && state.position === 0 && spotifyWasPlaying) {
+        spotifyWasPlaying = false;
+        if (currentTrack?.type === 'spotify') {
+          socket.emit('next_track');
+        }
+      }
+      if (!state.paused) spotifyWasPlaying = true;
     });
 
     spotifyPlayer.connect();
@@ -636,14 +646,58 @@ function renderChatHistory(history) {
   history.forEach(appendChatMessage);
 }
 
+// ===== STICKERS DE IMAGEN POR TEMA =====
+const IMAGE_STICKERS = {
+  nintendo: {
+    base: '/assets/Sprites/',
+    ext: '.jpg',
+    prefix: 'Sticker',
+    count: 7
+  }
+};
+
+async function renderImageStickers(theme) {
+  const layer = document.getElementById('stickersLayer');
+  if (!layer) return;
+  layer.innerHTML = '';
+  const cfg = IMAGE_STICKERS[theme];
+  if (!cfg) return false;
+
+  // posiciones repartidas por los bordes (evitando el centro donde van las tarjetas)
+  const positions = [
+    { left: '2%', top: '16%', rot: -6 },
+    { right: '2%', top: '14%', rot: 5 },
+    { left: '3%', top: '46%', rot: 4 },
+    { right: '2.5%', top: '44%', rot: -5 },
+    { left: '2%', bottom: '10%', rot: 7 },
+    { right: '3%', bottom: '12%', rot: -4 },
+    { left: '1.5%', top: '72%', rot: 3 }
+  ];
+
+  let shown = 0;
+  for (let i = 1; i <= cfg.count; i++) {
+    const url = cfg.base + cfg.prefix + i + cfg.ext;
+    const ok = await spriteExists(url);
+    if (!ok) continue;
+    const pos = positions[(i - 1) % positions.length];
+    const el = document.createElement('div');
+    el.className = 'img-sticker';
+    el.style.setProperty('--rot', pos.rot + 'deg');
+    el.style.animationDelay = (i * 0.5) + 's';
+    Object.assign(el.style, { left: pos.left, right: pos.right, top: pos.top, bottom: pos.bottom });
+    const img = document.createElement('img');
+    img.src = url;
+    img.loading = 'lazy';
+    el.appendChild(img);
+    layer.appendChild(el);
+    shown++;
+  }
+  return shown > 0;
+}
+
 // ===== PERSONAJES ANIMADOS (sprites por frames) =====
 const CHARACTERS = {
-  dark: [
-    { name: 'mago', frames: 4, height: 200, fps: 4, pos: { left: '3%', bottom: '2%' } },
-    { name: 'caballero', frames: 4, height: 160, fps: 5, pos: { right: '3%', bottom: '2%' } },
-    { name: 'familiar', frames: 4, height: 90, fps: 6, pos: { left: '14%', bottom: '20%' }, float: true },
-    { name: 'dragon', frames: 4, height: 110, fps: 4, pos: { right: '12%', top: '8%' }, fly: true }
-  ],
+  dark: [],
   aero: [],
   nintendo: []
 };
@@ -923,14 +977,7 @@ function setTheme(theme) {
   renderBgImage(theme);
   renderScene(theme);
   renderCharacters(theme);
-  // si hay personajes animados reales para este tema, ocultar los stickers SVG simples
-  const hasChars = (CHARACTERS[theme] || []).length > 0;
-  if (hasChars) {
-    const layer = document.getElementById('stickersLayer');
-    if (layer) layer.innerHTML = '';
-  } else {
-    renderStickers(theme);
-  }
+  renderImageStickers(theme);
   const names = { nintendo: 'Old Nintendo', dark: 'Dark Fantasy', aero: 'Frutiger Aero' };
   showNotif('Tema: ' + (names[theme] || theme));
 }
