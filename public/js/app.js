@@ -665,13 +665,13 @@ async function renderImageStickers(theme) {
 
   // posiciones repartidas por los bordes (evitando el centro donde van las tarjetas)
   const positions = [
-    { left: '2%', top: '14%', rot: -6 },
-    { right: '2%', top: '12%', rot: 5 },
-    { left: '2.5%', top: '44%', rot: 4 },
-    { right: '2%', top: '42%', rot: -5 },
-    { left: '2%', bottom: '8%', rot: 7 },
-    { right: '2.5%', bottom: '10%', rot: -4 },
-    { left: '1%', top: '70%', rot: 3 }
+    { left: '2%', top: '12%', rot: -6 },
+    { right: '2%', top: '11%', rot: 5 },
+    { left: '2.5%', top: '38%', rot: 4 },
+    { right: '2%', top: '37%', rot: -5 },
+    { left: '2.5%', top: '63%', rot: 7 },
+    { right: '2.5%', top: '64%', rot: -4 },
+    { left: '2%', bottom: '6%', rot: 3 }
   ];
   // formas y animaciones variadas por sticker
   const shapes = ['shape-polaroid', 'shape-circle', 'shape-blob', 'shape-diamond', 'shape-polaroid', 'shape-hexagon', 'shape-circle'];
