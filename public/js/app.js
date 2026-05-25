@@ -665,14 +665,17 @@ async function renderImageStickers(theme) {
 
   // posiciones repartidas por los bordes (evitando el centro donde van las tarjetas)
   const positions = [
-    { left: '2%', top: '16%', rot: -6 },
-    { right: '2%', top: '14%', rot: 5 },
-    { left: '3%', top: '46%', rot: 4 },
-    { right: '2.5%', top: '44%', rot: -5 },
-    { left: '2%', bottom: '10%', rot: 7 },
-    { right: '3%', bottom: '12%', rot: -4 },
-    { left: '1.5%', top: '72%', rot: 3 }
+    { left: '2%', top: '14%', rot: -6 },
+    { right: '2%', top: '12%', rot: 5 },
+    { left: '2.5%', top: '44%', rot: 4 },
+    { right: '2%', top: '42%', rot: -5 },
+    { left: '2%', bottom: '8%', rot: 7 },
+    { right: '2.5%', bottom: '10%', rot: -4 },
+    { left: '1%', top: '70%', rot: 3 }
   ];
+  // formas y animaciones variadas por sticker
+  const shapes = ['shape-polaroid', 'shape-circle', 'shape-blob', 'shape-diamond', 'shape-polaroid', 'shape-hexagon', 'shape-circle'];
+  const anims = ['', 'anim-pulse', '', 'anim-wobble', 'anim-pulse', 'anim-spin', ''];
 
   let shown = 0;
   for (let i = 1; i <= cfg.count; i++) {
@@ -680,10 +683,12 @@ async function renderImageStickers(theme) {
     const ok = await spriteExists(url);
     if (!ok) continue;
     const pos = positions[(i - 1) % positions.length];
+    const shape = shapes[(i - 1) % shapes.length];
+    const anim = anims[(i - 1) % anims.length];
     const el = document.createElement('div');
-    el.className = 'img-sticker';
+    el.className = 'img-sticker ' + shape + (anim ? ' ' + anim : '');
     el.style.setProperty('--rot', pos.rot + 'deg');
-    el.style.animationDelay = (i * 0.5) + 's';
+    el.style.animationDelay = (i * 0.4) + 's';
     Object.assign(el.style, { left: pos.left, right: pos.right, top: pos.top, bottom: pos.bottom });
     const img = document.createElement('img');
     img.src = url;

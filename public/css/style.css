@@ -1719,48 +1719,100 @@ body {
 /* ===== STICKERS DE IMAGEN (fotos retro) ===== */
 .img-sticker {
   position: absolute;
-  width: 110px;
-  height: 110px;
+  width: clamp(90px, 11vw, 200px);
+  height: clamp(90px, 11vw, 200px);
   transform: rotate(var(--rot, 0deg));
   animation: stickerSway 4s ease-in-out infinite;
-  filter: drop-shadow(3px 4px 6px rgba(0,0,0,0.4));
+  filter: drop-shadow(3px 5px 8px rgba(0,0,0,0.45));
 }
 .img-sticker img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
-  border: 4px solid #fff;
-  border-bottom-width: 22px;
-  border-radius: 2px;
   image-rendering: auto;
 }
-[data-theme="nintendo"] .img-sticker img {
-  border-color: #f5f3e8;
+
+/* FORMA: polaroid (cuadrada con marco abajo) */
+.img-sticker.shape-polaroid img {
+  border: 5px solid #fff;
+  border-bottom-width: 26px;
+  border-radius: 3px;
+}
+[data-theme="nintendo"] .img-sticker.shape-polaroid img { border-color: #f5f3e8; }
+
+/* FORMA: circulo */
+.img-sticker.shape-circle img {
+  border-radius: 50%;
+  border: 5px solid #fff;
+}
+[data-theme="nintendo"] .img-sticker.shape-circle img { border-color: #f5f3e8; }
+
+/* FORMA: rombo/diamante */
+.img-sticker.shape-diamond img {
+  border: 5px solid #fff;
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
 }
 
+/* FORMA: hexagono */
+.img-sticker.shape-hexagon img {
+  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+  border: none;
+}
+
+/* FORMA: estrella */
+.img-sticker.shape-star img {
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+}
+
+/* FORMA: blob redondeado organico */
+.img-sticker.shape-blob img {
+  border-radius: 60% 40% 55% 45% / 45% 55% 40% 60%;
+  border: 5px solid #fff;
+}
+[data-theme="nintendo"] .img-sticker.shape-blob img { border-color: #f5f3e8; }
+
+/* ANIMACIONES variadas */
 @keyframes stickerSway {
   0%, 100% { transform: rotate(var(--rot, 0deg)) translateY(0); }
-  50% { transform: rotate(calc(var(--rot, 0deg) * -0.5)) translateY(-12px); }
+  50% { transform: rotate(calc(var(--rot, 0deg) * -0.5)) translateY(-14px); }
 }
+@keyframes stickerSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes stickerPulse {
+  0%, 100% { transform: rotate(var(--rot,0deg)) scale(1); }
+  50% { transform: rotate(var(--rot,0deg)) scale(1.12); }
+}
+@keyframes stickerWobble {
+  0%, 100% { transform: rotate(var(--rot,0deg)) translateX(0); }
+  25% { transform: rotate(calc(var(--rot,0deg) + 6deg)) translateX(8px); }
+  75% { transform: rotate(calc(var(--rot,0deg) - 6deg)) translateX(-8px); }
+}
+.img-sticker.anim-spin { animation: stickerSpin 12s linear infinite; }
+.img-sticker.anim-pulse { animation: stickerPulse 3s ease-in-out infinite; }
+.img-sticker.anim-wobble { animation: stickerWobble 5s ease-in-out infinite; }
 
 .img-sticker:hover {
   z-index: 50;
   animation-play-state: paused;
+  transform: scale(1.15) rotate(var(--rot, 0deg));
 }
 
-/* cuando suena musica, los stickers se mueven mas */
+/* cuando suena musica, los stickers bailan */
 .music-playing .img-sticker {
-  animation: stickerDance 0.8s ease-in-out infinite;
+  animation: stickerDance 0.7s ease-in-out infinite;
 }
 @keyframes stickerDance {
   0%, 100% { transform: rotate(var(--rot, 0deg)) translateY(0) scale(1); }
-  50% { transform: rotate(calc(var(--rot, 0deg) + 3deg)) translateY(-8px) scale(1.05); }
+  50% { transform: rotate(calc(var(--rot, 0deg) + 4deg)) translateY(-10px) scale(1.08); }
 }
 
-@media (max-width: 1100px) {
-  .img-sticker { width: 80px; height: 80px; }
-}
+/* RESPONSIVE - ahora SI se ven en movil */
 @media (max-width: 800px) {
-  .img-sticker { display: none; }
+  .img-sticker {
+    width: clamp(55px, 16vw, 90px);
+    height: clamp(55px, 16vw, 90px);
+  }
 }
