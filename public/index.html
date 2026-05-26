@@ -52,6 +52,7 @@
         <button class="theme-btn" data-set="aero" onclick="setTheme('aero')" title="Frutiger Aero">💧</button>
       </div>
       <button class="btn-pixel btn-yellow battle-launch" onclick="openBattleMenu()" title="Batalla de Stickers">⚔ BATALLA</button>
+      <button class="btn-pixel btn-green td-launch" onclick="openTdMenu()" title="Tower Defense">🏰 TD</button>
     </div>
   </header>
 
@@ -284,6 +285,16 @@
     <div class="battle-header">⚔ BATALLA DE STICKERS</div>
     <div class="battle-content" id="battleContent"></div>
     <button class="battle-close" onclick="closeBattle()">✕</button>
+  </div>
+</div>
+
+<div class="td-overlay" id="tdOverlay" style="display:none">
+  <div class="td-box">
+    <div class="td-header">
+      <span>🏰 TOWER DEFENSE VERSUS</span>
+      <button class="td-close" onclick="closeTd()">✕</button>
+    </div>
+    <div class="td-game" id="tdGame"></div>
   </div>
 </div>
 

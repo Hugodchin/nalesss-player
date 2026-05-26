@@ -47,6 +47,113 @@ let sharedState = {
 // duelos activos: { duelId: { challenger, opponent, choices, stickers } }
 let duels = {};
 
+// partidas tower defense versus: { tdId: {...} }
+let tdGames = {};
+let tdWaiting = null; // jugador esperando rival
+
+// envia el estado actual de la partida a ambos jugadores
+function broadcastTd(tdId) {
+  const g = tdGames[tdId];
+  if (!g) return;
+  const snapshot = {
+    players: Object.entries(g.players).map(([id, p]) => ({
+      userId: id, name: p.name, hp: p.hp, gold: p.gold, side: p.side, towers: p.towers
+    })),
+    enemies: g.enemies,
+    tick: g.tick
+  };
+  for (const p of Object.values(g.players)) {
+    io.to(p.socketId).emit('td_state', snapshot);
+  }
+}
+
+// bucle principal del juego (corre en el servidor)
+function startTdLoop(tdId) {
+  const g = tdGames[tdId];
+  if (!g) return;
+  const TICK_MS = 100; // 10 ticks por segundo
+
+  g.loop = setInterval(() => {
+    const game = tdGames[tdId];
+    if (!game) return;
+    game.tick++;
+
+    // oro pasivo cada segundo (cada 10 ticks)
+    if (game.tick % 10 === 0) {
+      for (const p of Object.values(game.players)) p.gold += 8;
+    }
+
+    const playerIds = Object.keys(game.players);
+
+    // mover tropas y resolver torres
+    for (const enemy of game.enemies) {
+      enemy.progress += enemy.speed;
+    }
+
+    // las torres disparan a tropas enemigas en su lado
+    for (const [ownerId, p] of Object.entries(game.players)) {
+      for (const tower of p.towers) {
+        const dmgMap = { basic: 6, fast: 3, heavy: 14 };
+        const rateMap = { basic: 5, fast: 2, heavy: 9 }; // ticks entre disparos
+        const range = 18;
+        if (game.tick - (tower.lastShot || 0) < (rateMap[tower.type] || 5)) continue;
+        // objetivos: tropas que vienen hacia MI lado (las del rival)
+        const incoming = game.enemies.filter(e => e.targetSide === p.side && e.hp > 0);
+        // tower.x esta en 0-100 sobre el ancho; la tropa progress 0-100 mapea segun lado
+        let target = null;
+        for (const e of incoming) {
+          const epos = e.targetSide === 'right' ? e.progress : (100 - e.progress);
+          if (Math.abs(epos - tower.x) <= range) { target = e; break; }
+        }
+        if (target) {
+          target.hp -= (dmgMap[tower.type] || 6);
+          tower.lastShot = game.tick;
+          if (target.hp <= 0) {
+            // recompensa al dueno de la torre
+            p.gold += 5;
+          }
+        }
+      }
+    }
+
+    // quitar tropas muertas
+    game.enemies = game.enemies.filter(e => e.hp > 0);
+
+    // tropas que llegaron a la base rival (progress >= 100) hacen dano
+    const arrived = game.enemies.filter(e => e.progress >= 100);
+    for (const e of arrived) {
+      // restar vida al jugador de targetSide
+      const victim = Object.values(game.players).find(p => p.side === e.targetSide);
+      if (victim) {
+        const dmg = { soldier: 8, runner: 5, tank: 18 }[e.type] || 8;
+        victim.hp -= dmg;
+      }
+    }
+    game.enemies = game.enemies.filter(e => e.progress < 100);
+
+    // condicion de victoria
+    let loser = null, winner = null;
+    for (const [id, p] of Object.entries(game.players)) {
+      if (p.hp <= 0) {
+        loser = id;
+        winner = playerIds.find(o => o !== id);
+      }
+    }
+
+    broadcastTd(tdId);
+
+    if (loser) {
+      const winnerName = game.players[winner]?.name || '?';
+      for (const p of Object.values(game.players)) {
+        io.to(p.socketId).emit('td_gameover', { winnerName });
+      }
+      clearInterval(game.loop);
+      delete tdGames[tdId];
+    }
+  }, TICK_MS);
+}
+
+
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
 app.get('/login', (req, res) => {
@@ -384,7 +491,96 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ===== TOWER DEFENSE VERSUS =====
+  socket.on('td_join', () => {
+    const user = sharedState.users[userId];
+    const myName = user?.username || 'Jugador';
+
+    if (tdWaiting && tdWaiting.userId !== userId && sharedState.users[tdWaiting.userId]) {
+      // emparejar con el que esperaba
+      const tdId = generateId();
+      const p1 = tdWaiting;
+      const p2 = { userId, socketId: socket.id, name: myName };
+      tdWaiting = null;
+
+      tdGames[tdId] = {
+        id: tdId,
+        players: {
+          [p1.userId]: { name: p1.name, socketId: p1.socketId, hp: 100, gold: 150, towers: [], side: 'left' },
+          [p2.userId]: { name: p2.name, socketId: p2.socketId, hp: 100, gold: 150, towers: [], side: 'right' }
+        },
+        enemies: [],
+        tick: 0,
+        started: Date.now(),
+        loop: null
+      };
+
+      const playersInfo = Object.entries(tdGames[tdId].players).map(([id, p]) => ({ userId: id, name: p.name, side: p.side }));
+      io.to(p1.socketId).emit('td_start', { tdId, you: p1.userId, players: playersInfo });
+      io.to(p2.socketId).emit('td_start', { tdId, you: p2.userId, players: playersInfo });
+
+      startTdLoop(tdId);
+    } else {
+      // ponerse a esperar
+      tdWaiting = { userId, socketId: socket.id, name: myName };
+      socket.emit('td_waiting');
+    }
+  });
+
+  socket.on('td_cancel', () => {
+    if (tdWaiting && tdWaiting.userId === userId) tdWaiting = null;
+  });
+
+  socket.on('td_place_tower', ({ tdId, x, y, towerType }) => {
+    const g = tdGames[tdId];
+    if (!g || !g.players[userId]) return;
+    const costs = { basic: 50, fast: 75, heavy: 100 };
+    const cost = costs[towerType] || 50;
+    const p = g.players[userId];
+    if (p.gold < cost) return;
+    p.gold -= cost;
+    p.towers.push({ x, y, type: towerType, lastShot: 0 });
+    broadcastTd(tdId);
+  });
+
+  socket.on('td_send_troop', ({ tdId, troopType }) => {
+    const g = tdGames[tdId];
+    if (!g || !g.players[userId]) return;
+    const costs = { soldier: 30, runner: 40, tank: 80 };
+    const cost = costs[troopType] || 30;
+    const p = g.players[userId];
+    if (p.gold < cost) return;
+    p.gold -= cost;
+    // la tropa va hacia la base del rival
+    const targetSide = p.side === 'left' ? 'right' : 'left';
+    const hpMap = { soldier: 30, runner: 18, tank: 70 };
+    const spdMap = { soldier: 0.4, runner: 0.8, tank: 0.25 };
+    g.enemies.push({
+      id: generateId(),
+      owner: userId,
+      targetSide,
+      type: troopType,
+      hp: hpMap[troopType] || 30,
+      maxHp: hpMap[troopType] || 30,
+      speed: spdMap[troopType] || 0.4,
+      progress: 0 // 0 a 100, recorre el camino hacia la base rival
+    });
+    broadcastTd(tdId);
+  });
+
   socket.on('disconnect', () => {
+    if (tdWaiting && tdWaiting.userId === userId) tdWaiting = null;
+    // terminar partidas td donde estaba
+    for (const [tdId, g] of Object.entries(tdGames)) {
+      if (g.players[userId]) {
+        const other = Object.keys(g.players).find(id => id !== userId);
+        if (other && sharedState.users[other]) {
+          io.to(g.players[other].socketId).emit('td_opponent_left');
+        }
+        if (g.loop) clearInterval(g.loop);
+        delete tdGames[tdId];
+      }
+    }
     delete sharedState.users[userId];
     io.emit('users_updated', Object.values(sharedState.users).map(u => ({ userId: u.userId, username: u.username })));
     console.log('Usuario desconectado:', userId);

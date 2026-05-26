@@ -19,6 +19,11 @@ let seekingLocal = false;
 let spotifyWasPlaying = false;
 let connectedUsers = [];
 let currentDuelId = null;
+let tdState = null;
+let tdId = null;
+let tdMe = null;
+let tdMySide = null;
+let tdSelectedTower = 'basic';
 
 const getCookie = (name) => {
   const val = document.cookie.split('; ').find(r => r.startsWith(name + '='));
@@ -1131,6 +1136,201 @@ socket.on('duel_result', ({ challengerName, opponentName, challengerChoice, oppo
   `;
   currentDuelId = null;
   if (winner !== 'empate') showNotif('🏆 ' + winner + ' ganó la batalla');
+});
+
+// ===== TOWER DEFENSE VERSUS =====
+function openTdMenu() {
+  if (!myUsername) { showNotif('Pon tu nombre para jugar'); return; }
+  const game = document.getElementById('tdGame');
+  game.innerHTML = `
+    <div class="td-menu">
+      <p class="td-msg">Tower Defense 1 vs 1</p>
+      <p class="td-sub">Defiende tu base y envía tropas a destruir la del rival.</p>
+      <button class="td-btn" onclick="tdFindMatch()">🎮 Buscar partida</button>
+    </div>
+  `;
+  document.getElementById('tdOverlay').style.display = 'flex';
+}
+
+function closeTd() {
+  document.getElementById('tdOverlay').style.display = 'none';
+  if (tdId) { socket.emit('td_cancel'); }
+  tdId = null; tdState = null;
+}
+
+function tdFindMatch() {
+  socket.emit('td_join');
+  const game = document.getElementById('tdGame');
+  game.innerHTML = `<div class="td-menu"><p class="td-msg">Buscando rival...</p><div class="battle-spinner">🏰</div><button class="td-btn decline" onclick="closeTd()">Cancelar</button></div>`;
+}
+
+socket.on('td_waiting', () => {
+  const game = document.getElementById('tdGame');
+  game.innerHTML = `<div class="td-menu"><p class="td-msg">Esperando que entre otro jugador...</p><div class="battle-spinner">🏰</div><button class="td-btn decline" onclick="closeTd()">Cancelar</button></div>`;
+  document.getElementById('tdOverlay').style.display = 'flex';
+});
+
+socket.on('td_start', ({ tdId: id, you, players }) => {
+  tdId = id;
+  tdMe = you;
+  tdMySide = players.find(p => p.userId === you)?.side || 'left';
+  buildTdBoard(players);
+  document.getElementById('tdOverlay').style.display = 'flex';
+});
+
+function buildTdBoard(players) {
+  const me = players.find(p => p.userId === tdMe);
+  const rival = players.find(p => p.userId !== tdMe);
+  const game = document.getElementById('tdGame');
+  game.innerHTML = `
+    <div class="td-hud">
+      <div class="td-player-info">🛡️ ${escHtml(me.name)} (tú) · <span id="tdMyHp">100</span>❤ · <span id="tdMyGold">150</span>🟡</div>
+      <div class="td-player-info">⚔ ${escHtml(rival.name)} · <span id="tdRivalHp">100</span>❤</div>
+    </div>
+    <canvas id="tdCanvas" width="600" height="300"></canvas>
+    <div class="td-controls">
+      <div class="td-control-group">
+        <span class="td-label">Torres:</span>
+        <button class="td-tower-btn active" data-tower="basic" onclick="selectTower('basic')">🔫 Básica 50</button>
+        <button class="td-tower-btn" data-tower="fast" onclick="selectTower('fast')">⚡ Rápida 75</button>
+        <button class="td-tower-btn" data-tower="heavy" onclick="selectTower('heavy')">💥 Pesada 100</button>
+      </div>
+      <div class="td-control-group">
+        <span class="td-label">Tropas:</span>
+        <button class="td-troop-btn" onclick="sendTroop('soldier')">👷 Soldado 30</button>
+        <button class="td-troop-btn" onclick="sendTroop('runner')">🏃 Corredor 40</button>
+        <button class="td-troop-btn" onclick="sendTroop('tank')">🛡️ Tanque 80</button>
+      </div>
+      <p class="td-hint">Haz clic en TU lado del mapa para poner torres</p>
+    </div>
+  `;
+  const canvas = document.getElementById('tdCanvas');
+  canvas.addEventListener('click', onTdCanvasClick);
+}
+
+function selectTower(type) {
+  tdSelectedTower = type;
+  document.querySelectorAll('.td-tower-btn').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('data-tower') === type);
+  });
+}
+
+function onTdCanvasClick(e) {
+  if (!tdId || !tdState) return;
+  const canvas = document.getElementById('tdCanvas');
+  const rect = canvas.getBoundingClientRect();
+  const xPct = ((e.clientX - rect.left) / rect.width) * 100;
+  const yPct = ((e.clientY - rect.top) / rect.height) * 100;
+  // solo puedo poner torres en MI mitad
+  const myHalf = tdMySide === 'left' ? (xPct < 50) : (xPct >= 50);
+  if (!myHalf) { showNotif('Solo en tu lado del mapa'); return; }
+  socket.emit('td_place_tower', { tdId, x: xPct, y: yPct, towerType: tdSelectedTower });
+}
+
+function sendTroop(type) {
+  if (!tdId) return;
+  socket.emit('td_send_troop', { tdId, troopType: type });
+}
+
+socket.on('td_state', (state) => {
+  tdState = state;
+  renderTdCanvas();
+  // actualizar HUD
+  const me = state.players.find(p => p.userId === tdMe);
+  const rival = state.players.find(p => p.userId !== tdMe);
+  if (me) {
+    const hpEl = document.getElementById('tdMyHp');
+    const goldEl = document.getElementById('tdMyGold');
+    if (hpEl) hpEl.textContent = Math.max(0, Math.round(me.hp));
+    if (goldEl) goldEl.textContent = Math.round(me.gold);
+  }
+  if (rival) {
+    const rHp = document.getElementById('tdRivalHp');
+    if (rHp) rHp.textContent = Math.max(0, Math.round(rival.hp));
+  }
+});
+
+function renderTdCanvas() {
+  const canvas = document.getElementById('tdCanvas');
+  if (!canvas || !tdState) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  // fondo
+  ctx.fillStyle = '#1a2a1a';
+  ctx.fillRect(0, 0, W, H);
+  // linea media
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+  ctx.setLineDash([6, 6]);
+  ctx.beginPath(); ctx.moveTo(W/2, 0); ctx.lineTo(W/2, H); ctx.stroke();
+  ctx.setLineDash([]);
+  // camino horizontal
+  ctx.fillStyle = '#3a3a2a';
+  ctx.fillRect(0, H/2 - 24, W, 48);
+
+  // bases
+  const myLeft = tdMySide === 'left';
+  // base izquierda
+  ctx.fillStyle = myLeft ? '#2980b9' : '#c0392b';
+  ctx.fillRect(4, H/2 - 36, 30, 72);
+  // base derecha
+  ctx.fillStyle = myLeft ? '#c0392b' : '#2980b9';
+  ctx.fillRect(W - 34, H/2 - 36, 30, 72);
+
+  // torres
+  for (const p of tdState.players) {
+    const isMine = p.userId === tdMe;
+    ctx.fillStyle = isMine ? '#5dade2' : '#e74c3c';
+    for (const t of p.towers) {
+      const tx = (t.x / 100) * W;
+      const ty = (t.y / 100) * H;
+      ctx.beginPath();
+      ctx.arc(tx, ty, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = '10px monospace';
+      const icon = t.type === 'basic' ? 'B' : (t.type === 'fast' ? 'F' : 'H');
+      ctx.fillText(icon, tx - 3, ty + 3);
+      ctx.fillStyle = isMine ? '#5dade2' : '#e74c3c';
+    }
+  }
+
+  // tropas (enemies)
+  for (const e of tdState.enemies) {
+    // progress 0-100; si va a 'right', avanza de izq a der; si va a 'left', de der a izq
+    let xPct = e.targetSide === 'right' ? e.progress : (100 - e.progress);
+    const ex = (xPct / 100) * W;
+    const ey = H/2;
+    const isMine = e.owner === tdMe;
+    ctx.fillStyle = isMine ? '#58d68d' : '#f39c12';
+    const size = e.type === 'tank' ? 11 : (e.type === 'runner' ? 6 : 8);
+    ctx.fillRect(ex - size/2, ey - size/2, size, size);
+    // barra de vida
+    ctx.fillStyle = '#000';
+    ctx.fillRect(ex - 8, ey - size/2 - 6, 16, 3);
+    ctx.fillStyle = '#2ecc71';
+    ctx.fillRect(ex - 8, ey - size/2 - 6, 16 * (e.hp / e.maxHp), 3);
+  }
+}
+
+socket.on('td_gameover', ({ winnerName }) => {
+  const game = document.getElementById('tdGame');
+  const won = winnerName === myUsername;
+  game.innerHTML = `<div class="td-menu">
+    <p class="td-result">${won ? '🏆 ¡GANASTE!' : '💀 Perdiste'}</p>
+    <p class="td-msg">Ganó ${escHtml(winnerName)}</p>
+    <button class="td-btn" onclick="tdFindMatch()">Jugar de nuevo</button>
+    <button class="td-btn decline" onclick="closeTd()">Salir</button>
+  </div>`;
+  tdId = null; tdState = null;
+  showNotif(won ? '🏆 Ganaste el Tower Defense' : '💀 Perdiste el Tower Defense');
+});
+
+socket.on('td_opponent_left', () => {
+  const game = document.getElementById('tdGame');
+  game.innerHTML = `<div class="td-menu"><p class="td-result">🏆 ¡Ganaste!</p><p class="td-msg">Tu rival se fue.</p><button class="td-btn decline" onclick="closeTd()">Salir</button></div>`;
+  tdId = null; tdState = null;
 });
 
 function initStars() {
