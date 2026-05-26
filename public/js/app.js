@@ -17,6 +17,8 @@ let ytProgressTimer = null;
 let videoVisible = false;
 let seekingLocal = false;
 let spotifyWasPlaying = false;
+let connectedUsers = [];
+let currentDuelId = null;
 
 const getCookie = (name) => {
   const val = document.cookie.split('; ').find(r => r.startsWith(name + '='));
@@ -334,6 +336,46 @@ function nextTrack() {
   socket.emit('next_track');
 }
 
+function toggleShuffle() {
+  socket.emit('toggle_shuffle');
+}
+
+function toggleRadio() {
+  socket.emit('toggle_radio');
+}
+
+// Modo radio: buscar una cancion recomendada de Spotify basada en la actual
+async function findRadioTrack(seedTrack) {
+  if (!accessToken) { socket.emit('next_track'); return; }
+  try {
+    // intentar obtener recomendaciones segun la cancion actual
+    let seedId = seedTrack?.spotifyId || seedTrack?.uri?.split(':').pop();
+    if (!seedId) {
+      // si no hay semilla valida, no continuar
+      socket.emit('track_stopped');
+      return;
+    }
+    const data = await spotifyApi('/recommendations?limit=1&seed_tracks=' + seedId);
+    if (data && data.tracks && data.tracks.length) {
+      const t = data.tracks[0];
+      socket.emit('radio_play', {
+        type: 'spotify',
+        name: t.name,
+        artist: t.artists.map(a => a.name).join(', '),
+        uri: t.uri,
+        spotifyId: t.id,
+        cover: t.album.images[0]?.url || null,
+        duration: t.duration_ms
+      });
+    } else {
+      socket.emit('track_stopped');
+    }
+  } catch (e) {
+    console.log('Radio error:', e);
+    socket.emit('track_stopped');
+  }
+}
+
 function prevTrack() {
   socket.emit('seek', 0);
 }
@@ -648,13 +690,19 @@ function renderChatHistory(history) {
 
 // ===== STICKERS DE IMAGEN POR TEMA =====
 const IMAGE_STICKERS = {
-  nintendo: {
-    base: '/assets/Sprites/',
-    ext: '.jpg',
-    prefix: 'Sticker',
-    count: 7
-  }
+  nintendo: { base: '/assets/Sprites/', ext: '.jpg', prefix: 'Sticker', count: 7 },
+  dark: { base: '/assets/Sprites/', ext: '.jpg', prefix: 'Sticker', count: 7 },
+  aero: { base: '/assets/Sprites/', ext: '.jpg', prefix: 'Sticker', count: 7 }
 };
+
+function shuffleArray(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 async function renderImageStickers(theme) {
   const layer = document.getElementById('stickersLayer');
@@ -673,22 +721,27 @@ async function renderImageStickers(theme) {
     { right: '2.5%', top: '64%', rot: -4 },
     { left: '2%', bottom: '6%', rot: 3 }
   ];
-  // formas y animaciones variadas por sticker
   const shapes = ['shape-polaroid', 'shape-circle', 'shape-blob', 'shape-diamond', 'shape-polaroid', 'shape-hexagon', 'shape-circle'];
   const anims = ['', 'anim-pulse', '', 'anim-wobble', 'anim-pulse', 'anim-spin', ''];
 
+  // orden aleatorio cada vez para dar variedad
+  const order = shuffleArray([1, 2, 3, 4, 5, 6, 7]);
+  const shuffledShapes = shuffleArray(shapes);
+  const shuffledAnims = shuffleArray(anims);
+
   let shown = 0;
-  for (let i = 1; i <= cfg.count; i++) {
-    const url = cfg.base + cfg.prefix + i + cfg.ext;
+  for (let p = 0; p < cfg.count; p++) {
+    const stickerNum = order[p];
+    const url = cfg.base + cfg.prefix + stickerNum + cfg.ext;
     const ok = await spriteExists(url);
     if (!ok) continue;
-    const pos = positions[(i - 1) % positions.length];
-    const shape = shapes[(i - 1) % shapes.length];
-    const anim = anims[(i - 1) % anims.length];
+    const pos = positions[p % positions.length];
+    const shape = shuffledShapes[p % shuffledShapes.length];
+    const anim = shuffledAnims[p % shuffledAnims.length];
     const el = document.createElement('div');
-    el.className = 'img-sticker ' + shape + (anim ? ' ' + anim : '');
+    el.className = 'img-sticker themed-sticker ' + shape + (anim ? ' ' + anim : '');
     el.style.setProperty('--rot', pos.rot + 'deg');
-    el.style.animationDelay = (i * 0.4) + 's';
+    el.style.animationDelay = (p * 0.4) + 's';
     Object.assign(el.style, { left: pos.left, right: pos.right, top: pos.top, bottom: pos.bottom });
     const img = document.createElement('img');
     img.src = url;
@@ -939,6 +992,147 @@ function renderStickers(theme) {
   });
 }
 
+// ===== BATALLA DE STICKERS =====
+function randomSticker() {
+  const n = Math.floor(Math.random() * 7) + 1;
+  return '/assets/Sprites/Sticker' + n + '.jpg';
+}
+
+function openBattleMenu() {
+  if (!myUsername) { showNotif('Pon tu nombre para jugar'); return; }
+  const others = connectedUsers.filter(u => u.userId !== myUserId && u.username);
+  const content = document.getElementById('battleContent');
+  if (!others.length) {
+    content.innerHTML = '<p class="battle-msg">No hay nadie más en línea para retar.<br>Espera a que entre alguien con nombre.</p>';
+  } else {
+    content.innerHTML = '<p class="battle-msg">Elige a quién retar:</p><div class="battle-rivals">' +
+      others.map(u => `<button class="battle-rival" onclick="challengeUser('${u.userId}')">⚔ ${escHtml(u.username)}</button>`).join('') +
+      '</div>';
+  }
+  document.getElementById('battleOverlay').style.display = 'flex';
+}
+
+function closeBattle() {
+  document.getElementById('battleOverlay').style.display = 'none';
+}
+
+function challengeUser(targetUserId) {
+  const myStick = randomSticker();
+  socket.emit('duel_challenge', { targetUserId, challengerSticker: myStick });
+}
+
+function showChoiceUI(duelId, myStickerUrl, rivalName, rivalStickerUrl) {
+  currentDuelId = duelId;
+  const content = document.getElementById('battleContent');
+  content.innerHTML = `
+    <div class="battle-arena">
+      <div class="battle-fighter"><img src="${myStickerUrl}" class="shape-circle"/><span>Tú</span></div>
+      <div class="battle-vs">VS</div>
+      <div class="battle-fighter"><img src="${rivalStickerUrl}" class="shape-circle"/><span>${escHtml(rivalName)}</span></div>
+    </div>
+    <p class="battle-msg">¡Elige tu jugada!</p>
+    <div class="battle-choices">
+      <button class="battle-choice" onclick="makeChoice('piedra')">✊<br>Piedra</button>
+      <button class="battle-choice" onclick="makeChoice('papel')">✋<br>Papel</button>
+      <button class="battle-choice" onclick="makeChoice('tijera')">✌️<br>Tijera</button>
+    </div>
+    <p class="battle-status" id="battleStatus"></p>
+  `;
+  document.getElementById('battleOverlay').style.display = 'flex';
+}
+
+function makeChoice(choice) {
+  if (!currentDuelId) return;
+  socket.emit('duel_choice', { duelId: currentDuelId, choice });
+  document.querySelectorAll('.battle-choice').forEach(b => b.disabled = true);
+  const st = document.getElementById('battleStatus');
+  if (st) st.textContent = 'Esperando al rival...';
+}
+
+// listeners de batalla
+socket.on('duel_invite', ({ duelId, fromName, challengerSticker }) => {
+  currentDuelId = duelId;
+  const myStick = randomSticker();
+  const content = document.getElementById('battleContent');
+  content.innerHTML = `
+    <p class="battle-msg"><b>${escHtml(fromName)}</b> te ha retado a una batalla ⚔</p>
+    <div class="battle-arena">
+      <div class="battle-fighter"><img src="${challengerSticker}" class="shape-circle"/><span>${escHtml(fromName)}</span></div>
+      <div class="battle-vs">VS</div>
+      <div class="battle-fighter"><img src="${myStick}" class="shape-circle"/><span>Tú</span></div>
+    </div>
+    <div class="battle-rivals">
+      <button class="battle-rival" onclick="acceptDuel('${duelId}','${myStick}')">✅ Aceptar</button>
+      <button class="battle-rival decline" onclick="declineDuel('${duelId}')">❌ Rechazar</button>
+    </div>
+  `;
+  document.getElementById('battleOverlay').style.display = 'flex';
+});
+
+function acceptDuel(duelId, myStick) {
+  socket.emit('duel_accept', { duelId, opponentSticker: myStick });
+}
+function declineDuel(duelId) {
+  socket.emit('duel_decline', { duelId });
+  closeBattle();
+}
+
+socket.on('duel_waiting', ({ opponentName }) => {
+  const content = document.getElementById('battleContent');
+  content.innerHTML = `<p class="battle-msg">Esperando que <b>${escHtml(opponentName)}</b> acepte el reto...</p><div class="battle-spinner">⚔</div>`;
+  document.getElementById('battleOverlay').style.display = 'flex';
+});
+
+socket.on('duel_declined', ({ opponentName }) => {
+  const content = document.getElementById('battleContent');
+  content.innerHTML = `<p class="battle-msg">${escHtml(opponentName)} rechazó el reto 🙅</p>`;
+  setTimeout(closeBattle, 2000);
+});
+
+socket.on('duel_start', ({ duelId, challengerName, opponentName, challengerSticker, opponentSticker }) => {
+  const amChallenger = (challengerName === myUsername);
+  const amOpponent = (opponentName === myUsername);
+  if (amChallenger) {
+    showChoiceUI(duelId, challengerSticker, opponentName, opponentSticker);
+  } else if (amOpponent) {
+    showChoiceUI(duelId, opponentSticker, challengerName, challengerSticker);
+  } else {
+    // espectador
+    showSpectator(duelId, challengerName, challengerSticker, opponentName, opponentSticker);
+  }
+});
+
+function showSpectator(duelId, cName, cStick, oName, oStick) {
+  const content = document.getElementById('battleContent');
+  content.innerHTML = `
+    <p class="battle-msg">⚔ ${escHtml(cName)} vs ${escHtml(oName)}</p>
+    <div class="battle-arena">
+      <div class="battle-fighter"><img src="${cStick}" class="shape-circle"/><span>${escHtml(cName)}</span></div>
+      <div class="battle-vs">VS</div>
+      <div class="battle-fighter"><img src="${oStick}" class="shape-circle"/><span>${escHtml(oName)}</span></div>
+    </div>
+    <p class="battle-status">Batalla en curso...</p>
+  `;
+  document.getElementById('battleOverlay').style.display = 'flex';
+}
+
+socket.on('duel_result', ({ challengerName, opponentName, challengerChoice, opponentChoice, winner }) => {
+  const content = document.getElementById('battleContent');
+  const emoji = { piedra: '✊', papel: '✋', tijera: '✌️' };
+  let resultText = winner === 'empate' ? '🤝 ¡EMPATE!' : '🏆 ¡Ganó ' + escHtml(winner) + '!';
+  content.innerHTML = `
+    <div class="battle-arena result">
+      <div class="battle-fighter"><div class="battle-emoji">${emoji[challengerChoice]}</div><span>${escHtml(challengerName)}</span></div>
+      <div class="battle-vs">VS</div>
+      <div class="battle-fighter"><div class="battle-emoji">${emoji[opponentChoice]}</div><span>${escHtml(opponentName)}</span></div>
+    </div>
+    <p class="battle-winner">${resultText}</p>
+    <button class="battle-rival" onclick="closeBattle()">Cerrar</button>
+  `;
+  currentDuelId = null;
+  if (winner !== 'empate') showNotif('🏆 ' + winner + ' ganó la batalla');
+});
+
 function initStars() {
   const container = document.getElementById('stars');
   for (let i = 0; i < 20; i++) {
@@ -1054,6 +1248,7 @@ socket.on('seek_to', ({ positionMs, isPlaying: playing }) => {
 
 socket.on('users_updated', (users) => {
   document.getElementById('userCount').textContent = users.length || 1;
+  connectedUsers = users;
 });
 
 socket.on('notification', ({ message }) => {
@@ -1062,6 +1257,20 @@ socket.on('notification', ({ message }) => {
 
 socket.on('chat_message', (msg) => {
   appendChatMessage(msg);
+});
+
+socket.on('modes_updated', ({ shuffle, radioMode }) => {
+  const sb = document.getElementById('shuffleBtn');
+  const rb = document.getElementById('radioBtn');
+  if (sb) sb.classList.toggle('mode-active', shuffle);
+  if (rb) rb.classList.toggle('mode-active', radioMode);
+});
+
+// solo UN cliente (el que tenga spotify) busca la recomendacion para evitar duplicados
+socket.on('radio_continue', (seedTrack) => {
+  if (accessToken && isSpotifyReady) {
+    findRadioTrack(seedTrack);
+  }
 });
 
 socket.on('disconnect', () => { showStatus('Desconectado', false); });

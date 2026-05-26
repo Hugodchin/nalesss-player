@@ -38,9 +38,14 @@ let sharedState = {
   progress: 0,
   startedAt: null,
   pausedProgressMs: 0,
+  shuffle: false,
+  radioMode: false,
   users: {},
   chat: []
 };
+
+// duelos activos: { duelId: { challenger, opponent, choices, stickers } }
+let duels = {};
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -202,8 +207,8 @@ io.on('connection', (socket) => {
   socket.emit('user_id', userId);
 
   socket.on('set_username', (username) => {
-    sharedState.users[userId] = { username, socketId: socket.id };
-    io.emit('users_updated', Object.values(sharedState.users));
+    sharedState.users[userId] = { userId, username, socketId: socket.id };
+    io.emit('users_updated', Object.values(sharedState.users).map(u => ({ userId: u.userId, username: u.username })));
   });
 
   socket.on('add_to_queue', (track) => {
@@ -257,10 +262,34 @@ io.on('connection', (socket) => {
     io.emit('seek_to', { positionMs, isPlaying: sharedState.isPlaying });
   });
 
+  socket.on('toggle_shuffle', () => {
+    sharedState.shuffle = !sharedState.shuffle;
+    io.emit('modes_updated', { shuffle: sharedState.shuffle, radioMode: sharedState.radioMode });
+    io.emit('notification', { message: sharedState.shuffle ? 'Shuffle activado 🔀' : 'Shuffle desactivado', type: 'mode' });
+  });
+
+  socket.on('toggle_radio', () => {
+    sharedState.radioMode = !sharedState.radioMode;
+    io.emit('modes_updated', { shuffle: sharedState.shuffle, radioMode: sharedState.radioMode });
+    io.emit('notification', { message: sharedState.radioMode ? 'Modo Radio activado 📻' : 'Modo Radio desactivado', type: 'mode' });
+  });
+
+  // el cliente encontro una recomendacion de spotify y la manda a reproducir para todos
+  socket.on('radio_play', (track) => {
+    startPlaying({ ...track, id: generateId(), addedBy: 'Radio 📻' });
+  });
+
   socket.on('next_track', () => {
     if (sharedState.queue.length > 0) {
-      const next = sharedState.queue.shift();
+      let idx = 0;
+      if (sharedState.shuffle) {
+        idx = Math.floor(Math.random() * sharedState.queue.length);
+      }
+      const next = sharedState.queue.splice(idx, 1)[0];
       startPlaying(next);
+    } else if (sharedState.radioMode && sharedState.currentTrack) {
+      // modo radio: pedir al cliente que continue con recomendaciones de spotify
+      io.emit('radio_continue', sharedState.currentTrack);
     } else {
       sharedState.currentTrack = null;
       sharedState.isPlaying = false;
@@ -285,9 +314,79 @@ io.on('connection', (socket) => {
     io.emit('chat_message', msg);
   });
 
+  // ===== BATALLA DE STICKERS (piedra-papel-tijera) =====
+  socket.on('duel_challenge', ({ targetUserId, challengerSticker }) => {
+    const challenger = sharedState.users[userId];
+    const opponent = sharedState.users[targetUserId];
+    if (!challenger || !opponent) return;
+    const duelId = generateId();
+    duels[duelId] = {
+      challengerId: userId,
+      opponentId: targetUserId,
+      challengerName: challenger.username,
+      opponentName: opponent.username,
+      challengerSticker,
+      opponentSticker: null,
+      choices: {}
+    };
+    // avisar al retado
+    io.to(opponent.socketId).emit('duel_invite', {
+      duelId,
+      fromName: challenger.username,
+      challengerSticker
+    });
+    io.to(socket.id).emit('duel_waiting', { duelId, opponentName: opponent.username });
+  });
+
+  socket.on('duel_accept', ({ duelId, opponentSticker }) => {
+    const d = duels[duelId];
+    if (!d) return;
+    d.opponentSticker = opponentSticker;
+    const cSock = sharedState.users[d.challengerId]?.socketId;
+    const oSock = sharedState.users[d.opponentId]?.socketId;
+    const payload = {
+      duelId,
+      challengerName: d.challengerName, opponentName: d.opponentName,
+      challengerSticker: d.challengerSticker, opponentSticker: d.opponentSticker
+    };
+    // todos ven la batalla
+    io.emit('duel_start', payload);
+  });
+
+  socket.on('duel_decline', ({ duelId }) => {
+    const d = duels[duelId];
+    if (!d) return;
+    const cSock = sharedState.users[d.challengerId]?.socketId;
+    if (cSock) io.to(cSock).emit('duel_declined', { opponentName: d.opponentName });
+    delete duels[duelId];
+  });
+
+  socket.on('duel_choice', ({ duelId, choice }) => {
+    const d = duels[duelId];
+    if (!d) return;
+    d.choices[userId] = choice; // 'piedra' | 'papel' | 'tijera'
+    // cuando ambos eligieron, resolver
+    if (d.choices[d.challengerId] && d.choices[d.opponentId]) {
+      const c1 = d.choices[d.challengerId];
+      const c2 = d.choices[d.opponentId];
+      let winner = 'empate';
+      if (c1 !== c2) {
+        const beats = { piedra: 'tijera', papel: 'piedra', tijera: 'papel' };
+        winner = (beats[c1] === c2) ? d.challengerName : d.opponentName;
+      }
+      io.emit('duel_result', {
+        duelId,
+        challengerName: d.challengerName, opponentName: d.opponentName,
+        challengerChoice: c1, opponentChoice: c2,
+        winner
+      });
+      delete duels[duelId];
+    }
+  });
+
   socket.on('disconnect', () => {
     delete sharedState.users[userId];
-    io.emit('users_updated', Object.values(sharedState.users));
+    io.emit('users_updated', Object.values(sharedState.users).map(u => ({ userId: u.userId, username: u.username })));
     console.log('Usuario desconectado:', userId);
   });
 });
